@@ -1,8 +1,7 @@
 # CUDA Stream 与 TensorRT 多流优化实战笔记
 
-适用于：PyTorch + TensorRT 推理（如 SAM/SAMV3 多模块模型）
-
-整理自实际工程调试经验
+> 适用于：PyTorch + TensorRT 推理（如 SAM/SAMV3 多模块模型）
+> 整理自实际工程调试经验
 
 ---
 
@@ -58,7 +57,7 @@ CPU 阻塞，**等待流中所有 GPU 任务完成**，保证数据就绪。
 
 典型结构：
 
-```Python
+```python
 
 stream = torch.cuda.Stream()
 
@@ -100,7 +99,7 @@ out = decoder(img_feat, txt_feat)
 
 执行示意图：
 
-```Plain Text
+```text
 
 stream_txt:  text_encoder --------------------→
 stream_img:  img_encoder ------→ mask_decoder ----→
@@ -129,7 +128,7 @@ stream_img:  img_encoder ------→ mask_decoder ----→
 
 ### 5.2 同步代码位置
 
-```Python
+```python
 
 # 1. 双流并行推理
 with torch.cuda.stream(stream_img):
@@ -156,7 +155,7 @@ feat = torch.cat([img_feat, txt_feat], dim=-1)
 
 如果 `TRTModule.__call__` 最后已经做了：
 
-```Python
+```python
 
 self.context.execute_async_v3(...)
 self.synchronize()
@@ -168,7 +167,7 @@ self.synchronize()
 
 - **特征拼接前不需要再加同步**
 
-```Python
+```python
 
 # 内部已同步，数据直接就绪
 img_feat = img_encoder(img)
@@ -182,7 +181,7 @@ feat = torch.cat([img_feat, txt_feat], dim=-1)
 
 去掉模块内部同步，只在**融合前统一同步**：
 
-```Python
+```python
 
 # 只提交任务，不等待
 with torch.cuda.stream(stream_img):
@@ -201,23 +200,23 @@ torch.cuda.synchronize()
 
 1. **多流 + 跨流数据依赖 + 不同步**
 
-→ 脏数据、NaN、非法地址、程序崩溃
+   → 脏数据、NaN、非法地址、程序崩溃
 
-1. **流太多**
+2. **流太多**
 
-→ GPU 调度开销变大，反而变慢
+   → GPU 调度开销变大，反而变慢
 
-1. **以为“多流一定更快”**
+3. **以为“多流一定更快”**
 
-→ 只有无依赖模块才能提速；有依赖的必须同流串行
+   → 只有无依赖模块才能提速；有依赖的必须同流串行
 
-1. **混淆 ** **`execute_async_v3`** ** 与同步**
+4. **混淆 `execute_async_v3` 与同步**
 
-    - `async_v3` = 异步提交（快）
+   - `async_v3` = 异步提交（快）
 
-    - `synchronize` = 等结果对（准）
+   - `synchronize` = 等结果对（准）
 
-    - 工程上必须搭配使用
+   - 工程上必须搭配使用
 
 ---
 
@@ -230,4 +229,5 @@ torch.cuda.synchronize()
 3. **多流结果要融合 → 先同步再使用**
 
 4. TensorRT 推理标准范式：**异步提交 + 按需同步**
-> （注：文档部分内容可能由 AI 生成）
+
+> 注：文档部分内容可能由 AI 生成。
